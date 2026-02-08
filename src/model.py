@@ -74,7 +74,7 @@ class MultiheadAttention(nn.Module):
         assert hidden_size % num_heads == 0
         self.scale = self.head_dim ** -0.5
         self.qkv = nn.Linear(hidden_size, 3 * hidden_size, bias=True)
-        self.proj = nn.Linear(hidden_size, hidden_size, dropout=dropout)
+        self.proj = nn.Linear(hidden_size, hidden_size)
 
     def forward(self, x):
         B, N, C = x.shape

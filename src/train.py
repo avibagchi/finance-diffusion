@@ -74,8 +74,7 @@ def train(args):
             opt.step()
             total_loss += loss.item()
         avg_loss = total_loss / len(loader)
-        if (epoch + 1) % 5 == 0 or epoch == 0:
-            print(f"Epoch {epoch+1}/{args.epochs}  Loss: {avg_loss:.6f}")
+        print(f"Epoch {epoch+1}/{args.epochs}  Loss: {avg_loss:.6f}")
 
     # Evaluation: backtest on test set
     model.eval()

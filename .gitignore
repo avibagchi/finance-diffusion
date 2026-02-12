@@ -1,10 +1,6 @@
 .venv
 checkpoint.pt
 
-# Data directories
-data/raw/
-data/processed/
-
 # Python cache
 __pycache__/
 *.pyc

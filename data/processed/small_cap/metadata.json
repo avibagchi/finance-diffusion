@@ -1,0 +1,122 @@
+{
+  "dataset_name": "Small Cap Stocks",
+  "num_days": 1255,
+  "num_assets": 26,
+  "start_date": "2021-02-10",
+  "end_date": "2026-02-09",
+  "asset_names": [
+    "BE",
+    "BLDP",
+    "BLNK",
+    "CHPT",
+    "CRSR",
+    "ENPH",
+    "EVGO",
+    "FCEL",
+    "FSLR",
+    "HIMS",
+    "HYLN",
+    "IONQ",
+    "LCID",
+    "LI",
+    "NIO",
+    "PLTR",
+    "PLUG",
+    "QBTS",
+    "QUBT",
+    "RKLB",
+    "RUN",
+    "SEDG",
+    "SOFI",
+    "STEM",
+    "WKHS",
+    "XPEV"
+  ],
+  "returns_stats": {
+    "mean": -0.0006989740068092942,
+    "std": 0.04880572855472565,
+    "min": -0.15000000596046448,
+    "max": 0.15000000596046448
+  },
+  "num_factors": 10,
+  "factor_names": [
+    "momentum_5d",
+    "momentum_10d",
+    "momentum_21d",
+    "momentum_63d",
+    "volatility_5d",
+    "volatility_21d",
+    "volatility_63d",
+    "relative_strength_21d",
+    "reversal_1d_5d",
+    "max_drawdown_63d"
+  ],
+  "factor_stats": {
+    "mean": -8.892845681746556e-05,
+    "std": 0.9913503826829515,
+    "min": -3.0,
+    "max": 3.0,
+    "per_factor_stats": {
+      "momentum_5d": {
+        "mean": -0.0010878333434425065,
+        "std": 0.9916173037202624,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "momentum_10d": {
+        "mean": -0.0005193611321244015,
+        "std": 0.992952613772142,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "momentum_21d": {
+        "mean": -0.00010032256099883044,
+        "std": 0.9931866820622111,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "momentum_63d": {
+        "mean": 0.0016620448668478254,
+        "std": 0.9930427135359556,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "volatility_5d": {
+        "mean": -0.0016728919731051556,
+        "std": 0.9933743068130998,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "volatility_21d": {
+        "mean": 0.0007335532577678179,
+        "std": 0.9894128100674445,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "volatility_63d": {
+        "mean": 0.00219548999275482,
+        "std": 0.9852378543147502,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "relative_strength_21d": {
+        "mean": -0.0001003225784486734,
+        "std": 0.9931866820691327,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "reversal_1d_5d": {
+        "mean": -0.001361847061530573,
+        "std": 0.9901962005333053,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "max_drawdown_63d": {
+        "mean": -0.0006377940358949759,
+        "std": 0.9912596523377,
+        "min": -3.0,
+        "max": 3.0
+      }
+    }
+  }
+}

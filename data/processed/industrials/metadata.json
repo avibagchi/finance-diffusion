@@ -1,0 +1,133 @@
+{
+  "dataset_name": "Industrial & Materials",
+  "num_days": 1758,
+  "num_assets": 37,
+  "start_date": "2019-02-12",
+  "end_date": "2026-02-09",
+  "asset_names": [
+    "AA",
+    "ALB",
+    "APD",
+    "BA",
+    "CAT",
+    "CLF",
+    "CMI",
+    "CSX",
+    "DD",
+    "DE",
+    "ECL",
+    "EMN",
+    "EMR",
+    "ETN",
+    "FCX",
+    "FDX",
+    "FMC",
+    "GD",
+    "GE",
+    "HON",
+    "LIN",
+    "LMT",
+    "MLM",
+    "MMM",
+    "NEM",
+    "NOC",
+    "NSC",
+    "NUE",
+    "PH",
+    "PPG",
+    "RTX",
+    "SHW",
+    "STLD",
+    "UNP",
+    "UPS",
+    "VMC",
+    "WM"
+  ],
+  "returns_stats": {
+    "mean": 0.0007773525430820882,
+    "std": 0.021915722638368607,
+    "min": -0.15000000596046448,
+    "max": 0.15000000596046448
+  },
+  "num_factors": 10,
+  "factor_names": [
+    "momentum_5d",
+    "momentum_10d",
+    "momentum_21d",
+    "momentum_63d",
+    "volatility_5d",
+    "volatility_21d",
+    "volatility_63d",
+    "relative_strength_21d",
+    "reversal_1d_5d",
+    "max_drawdown_63d"
+  ],
+  "factor_stats": {
+    "mean": -0.002154587183462473,
+    "std": 0.9776219686986747,
+    "min": -3.0,
+    "max": 3.0,
+    "per_factor_stats": {
+      "momentum_5d": {
+        "mean": -0.0004126043142053794,
+        "std": 0.9749948975332118,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "momentum_10d": {
+        "mean": -0.0003334849945909631,
+        "std": 0.981269036207668,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "momentum_21d": {
+        "mean": -0.0002502669672714579,
+        "std": 0.9840285417344349,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "momentum_63d": {
+        "mean": 0.00039667303524451776,
+        "std": 0.9887896777722944,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "volatility_5d": {
+        "mean": -0.012082765782484234,
+        "std": 0.9553683624345392,
+        "min": -2.7789673960356343,
+        "max": 3.0
+      },
+      "volatility_21d": {
+        "mean": -0.007862864597950051,
+        "std": 0.9725715444674178,
+        "min": -2.380149899586358,
+        "max": 3.0
+      },
+      "volatility_63d": {
+        "mean": -0.005516085429186961,
+        "std": 0.9815751117617318,
+        "min": -2.1642642101382243,
+        "max": 3.0
+      },
+      "relative_strength_21d": {
+        "mean": -0.00025026695691165296,
+        "std": 0.9840285418296421,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "reversal_1d_5d": {
+        "mean": -0.00037016578810171067,
+        "std": 0.9711330841203204,
+        "min": -3.0,
+        "max": 3.0
+      },
+      "max_drawdown_63d": {
+        "mean": 0.005135959960833162,
+        "std": 0.9819274974744907,
+        "min": -3.0,
+        "max": 2.634411813139617
+      }
+    }
+  }
+}

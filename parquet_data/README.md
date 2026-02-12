@@ -13,9 +13,17 @@ parquet_data/
 │       ├── factors.npy          # (T, D, K) factor array
 │       ├── returns.npy          # (T, D) returns array
 │       ├── prices.npy           # (T, D) price array
-│       └── metadata.json        # Dataset metadata
+│       ├── metadata.json        # Dataset metadata
+│       └── csv/                 # CSV exports for easy viewing
+│           ├── returns.csv
+│           ├── prices.csv
+│           ├── factors_long.csv
+│           ├── factor_*.csv     # Individual factor files
+│           ├── summary_stats.csv
+│           └── README.md
 ├── scripts/                      # Conversion utilities
-│   └── convert_parquet_data.py  # Conversion script
+│   ├── convert_parquet_data.py  # Parquet to numpy conversion
+│   └── export_to_csv.py         # Numpy to CSV export
 └── README.md                     # This file
 ```
 
@@ -117,6 +125,31 @@ for factors_batch, returns_batch in dataloader:
     pass
 ```
 
+### Load CSV Files (for Excel, R, or pandas)
+
+```python
+import pandas as pd
+
+# Load returns (wide format)
+returns = pd.read_csv('parquet_data/processed/real_factors/csv/returns.csv',
+                      index_col='date', parse_dates=True)
+
+# Load prices (wide format)
+prices = pd.read_csv('parquet_data/processed/real_factors/csv/prices.csv',
+                     index_col='date', parse_dates=True)
+
+# Load all factors (long/stacked format)
+factors = pd.read_csv('parquet_data/processed/real_factors/csv/factors_long.csv',
+                      parse_dates=['date'])
+
+# Load individual factor (wide format)
+ret_1_0 = pd.read_csv('parquet_data/processed/real_factors/csv/factor_ret_1_0.csv',
+                      index_col='date', parse_dates=True)
+
+# Load summary statistics
+stats = pd.read_csv('parquet_data/processed/real_factors/csv/summary_stats.csv')
+```
+
 ### Inspect Metadata
 
 ```python
@@ -130,6 +163,23 @@ print(f"Period: {metadata['start_date']} to {metadata['end_date']}")
 print(f"Stocks: {metadata['num_assets']}")
 print(f"Factors: {metadata['factor_names']}")
 ```
+
+## Exporting to CSV
+
+To export any dataset to CSV format:
+
+```bash
+cd parquet_data
+python scripts/export_to_csv.py --input processed/your_dataset
+```
+
+This creates a `csv/` subdirectory with:
+- `returns.csv` - Daily returns (wide format)
+- `prices.csv` - Daily prices (wide format)
+- `factors_long.csv` - All factors (long/stacked format)
+- `factor_*.csv` - Individual factor files (wide format)
+- `summary_stats.csv` - Statistical summary
+- `README.md` - CSV-specific documentation
 
 ## Converting New Data
 

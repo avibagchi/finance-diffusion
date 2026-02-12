@@ -7,25 +7,44 @@ This directory contains financial factor data converted from parquet format to t
 ```
 parquet_data/
 ├── raw/                          # Raw parquet files
-│   └── factors_first_500.parquet # Original factor data
+│   └── factors_first_500.parquet # Original factor data (500 stocks, 418 columns)
 ├── processed/                    # Converted panel data
-│   └── real_factors/
-│       ├── factors.npy          # (T, D, K) factor array
-│       ├── returns.npy          # (T, D) returns array
-│       ├── prices.npy           # (T, D) price array
+│   ├── all_factors/              # COMPLETE dataset - ALL 375 factors
+│   │   ├── factors.npy          # (11, 500, 375) - ALL FACTORS
+│   │   ├── returns.npy          # (11, 500)
+│   │   ├── prices.npy           # (11, 500)
+│   │   ├── metadata.json        # Dataset metadata
+│   │   └── csv/                 # CSV exports (375 factor files)
+│   └── real_factors/             # CURATED dataset - 10 selected factors
+│       ├── factors.npy          # (11, 500, 10) - Top 10 factors
+│       ├── returns.npy          # (11, 500)
+│       ├── prices.npy           # (11, 500)
 │       ├── metadata.json        # Dataset metadata
-│       └── csv/                 # CSV exports for easy viewing
-│           ├── returns.csv
-│           ├── prices.csv
-│           ├── factors_long.csv
-│           ├── factor_*.csv     # Individual factor files
-│           ├── summary_stats.csv
-│           └── README.md
+│       └── csv/                 # CSV exports (10 factor files)
 ├── scripts/                      # Conversion utilities
-│   ├── convert_parquet_data.py  # Parquet to numpy conversion
+│   ├── convert_all_factors.py   # Convert ALL factors (no filtering)
+│   ├── convert_parquet_data.py  # Convert with factor selection
 │   └── export_to_csv.py         # Numpy to CSV export
 └── README.md                     # This file
 ```
+
+## Available Datasets
+
+### 1. all_factors/ - COMPLETE DATASET
+**Contains ALL 375 factors from the parquet file - NO data loss**
+
+- **factors.npy**: `(11, 500, 375)` - All available factors
+- **returns.npy**: `(11, 500)` - Daily returns
+- **prices.npy**: `(11, 500)` - Daily prices
+- **Use this for**: Maximum information, research, factor discovery
+
+### 2. real_factors/ - CURATED DATASET
+**Contains 10 carefully selected high-quality factors**
+
+- **factors.npy**: `(11, 500, 10)` - Top 10 factors
+- **returns.npy**: `(11, 500)` - Daily returns
+- **prices.npy**: `(11, 500)` - Daily prices
+- **Use this for**: Quick prototyping, testing, lighter models
 
 ## Data Format
 
@@ -34,14 +53,14 @@ All processed data follows the standard panel format:
 ### Dimensions
 - **T** = num_days (11 days: 2010-01-04 to 2010-01-15)
 - **D** = num_assets (500 stocks)
-- **K** = num_factors (10 factors)
+- **K** = num_factors (375 for all_factors, 10 for real_factors)
 
-### Arrays
+### Arrays Format
 
 #### factors.npy
-- Shape: `(T, D, K)` = `(11, 500, 10)`
+- Shape: `(T, D, K)`
 - Type: `float32`
-- Contains 10 financial factors for each stock on each day
+- Contains K financial factors for each stock on each day
 
 #### returns.npy
 - Shape: `(T, D)` = `(11, 500)`
@@ -55,15 +74,28 @@ All processed data follows the standard panel format:
 
 ## Factors Included
 
-The dataset includes 10 carefully selected factors:
+### all_factors Dataset (375 factors)
+**Complete factor list** - includes ALL available factors from the original parquet:
+- Momentum and reversal factors (ret_*, seas_*)
+- Growth rates (at_gr*, sale_gr*, ni_gr*, etc.)
+- Valuation ratios (*_me, *_mev, *_be, etc.)
+- Quality scores (qmj*, *_score, earnings_variability, etc.)
+- Volatility and beta measures (ivol_*, beta_*, rvol_*, etc.)
+- Liquidity metrics (dolvol_*, turnover_*, ami_*, etc.)
+- Profitability metrics (gp_*, ebitda_*, roe_*, etc.)
+- And many more...
 
-### Momentum Factors (4)
+See `processed/all_factors/metadata.json` for the complete list of 375 factors.
+
+### real_factors Dataset (10 curated factors)
+
+#### Momentum Factors (4)
 1. **ret_1_0** - 1-day return
 2. **ret_3_1** - 3-month momentum
 3. **ret_6_1** - 6-month momentum
 4. **ret_12_1** - 12-month momentum
 
-### Valuation Factors (6)
+#### Valuation Factors (6)
 5. **be_me** - Book equity to market equity ratio
 6. **at_me** - Total assets to market equity ratio
 7. **sale_me** - Sales to market equity ratio

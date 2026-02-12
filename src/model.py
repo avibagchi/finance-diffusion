@@ -218,3 +218,71 @@ class FactorDiT(nn.Module):
             x = block(x, c)
 
         return self.final_layer(x, c)
+
+
+class UncondDiT(nn.Module):
+    """
+    Unconditional Diffusion Transformer for stock return generation (diffac-style).
+    Factors are not observed; the model implicitly learns the return distribution.
+    Conditioning only on diffusion timestep t (and position). Same DiT blocks as FactorDiT.
+    """
+
+    def __init__(
+        self,
+        num_assets,
+        hidden_size=256,
+        depth=6,
+        num_heads=8,
+        mlp_ratio=4.0,
+    ):
+        super().__init__()
+        self.num_assets = num_assets
+        self.hidden_size = hidden_size
+
+        self.input_proj = nn.Linear(1, hidden_size)
+        self.timestep_embedder = TimestepEmbedder(hidden_size)
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_assets, hidden_size))
+
+        self.blocks = nn.ModuleList([
+            FactorDiTBlock(hidden_size, num_heads, mlp_ratio) for _ in range(depth)
+        ])
+        self.final_layer = FactorDiTFinalLayer(hidden_size)
+
+        self.initialize_weights()
+
+    def initialize_weights(self):
+        def _basic_init(module):
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+
+        self.apply(_basic_init)
+        nn.init.normal_(self.timestep_embedder.mlp[0].weight, std=0.02)
+        nn.init.normal_(self.timestep_embedder.mlp[2].weight, std=0.02)
+
+        for block in self.blocks:
+            nn.init.zeros_(block.adaLN_modulation[-1].weight)
+            nn.init.zeros_(block.adaLN_modulation[-1].bias)
+        nn.init.zeros_(self.final_layer.adaLN_modulation[-1].weight)
+        nn.init.zeros_(self.final_layer.adaLN_modulation[-1].bias)
+        nn.init.zeros_(self.final_layer.linear.weight)
+        nn.init.zeros_(self.final_layer.linear.bias)
+
+    def forward(self, noisy_returns, t):
+        """
+        noisy_returns: (batch, num_assets)
+        t: (batch,) - diffusion timestep
+        returns: (batch, num_assets) - predicted noise epsilon
+        """
+        B, D = noisy_returns.shape
+        x = self.input_proj(noisy_returns.unsqueeze(-1))
+        x = x + self.pos_embed
+
+        t_emb = self.timestep_embedder(t)  # (B, hidden)
+        c = t_emb.unsqueeze(1).expand(B, D, self.hidden_size)
+
+        for block in self.blocks:
+            x = block(x, c)
+
+        return self.final_layer(x, c)

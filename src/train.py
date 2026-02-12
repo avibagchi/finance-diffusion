@@ -9,9 +9,9 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 import numpy as np
 
-from model import FactorDiT
+from model import FactorDiT, UncondDiT
 from diffusion import GaussianDiffusion
-from data import generate_synthetic_data, SyntheticDataset
+from data import generate_synthetic_data, SyntheticDataset, ReturnsOnlyDataset
 from portfolio import (
     mean_variance_weights,
     sample_mean_cov,
@@ -24,38 +24,69 @@ from portfolio import (
 def train(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
+    implicit = getattr(args, "implicit", False)
 
-    # Load data: .pt file or synthetic
-    if args.data_pt:
-        print(f"Loading data from {args.data_pt}...")
-        data = torch.load(args.data_pt, map_location="cpu")
-        factors = data["factors"]
-        returns = data["returns"]
-        if torch.is_tensor(factors):
-            factors = factors.numpy()
-        if torch.is_tensor(returns):
-            returns = returns.numpy()
-        factors = factors.astype(np.float32)
-        returns = returns.astype(np.float32)
-        T, D, K = factors.shape
-        print(f"  Shape: {T} days, {D} assets, {K} factors")
+    # --- Data loading ---
+    if implicit:
+        # Implicit-factor (diffac-style): use returns only; no observed factors
+        if args.data_pt:
+            print(f"Loading returns from {args.data_pt} (implicit-factor mode)...")
+            data = torch.load(args.data_pt, map_location="cpu")
+            returns = data["returns"]
+            if torch.is_tensor(returns):
+                returns = returns.numpy()
+            returns = returns.astype(np.float32)
+            T, D = returns.shape
+            print(f"  Shape: {T} days, {D} assets (no factors)")
+        else:
+            print("Generating synthetic data (implicit mode: using returns only)...")
+            factors, returns = generate_synthetic_data(
+                num_days=args.num_days,
+                num_assets=args.num_assets,
+                num_factors=args.num_factors,
+                seed=args.seed,
+            )
+            T, D = returns.shape[0], returns.shape[1]
+            print(f"  Shape: {T} days, {D} assets")
+        split = int(T * 0.8)
+        train_returns = returns[:split]
+        test_returns = returns[split:]
+        train_factors = None
+        test_factors = None
     else:
-        print("Generating synthetic data...")
-        factors, returns = generate_synthetic_data(
-            num_days=args.num_days,
-            num_assets=args.num_assets,
-            num_factors=args.num_factors,
-            seed=args.seed,
-        )
-        T, D, K = factors.shape
-        print(f"  Shape: {T} days, {D} assets, {K} factors")
+        # Conditional: factors + returns
+        if args.data_pt:
+            print(f"Loading data from {args.data_pt}...")
+            data = torch.load(args.data_pt, map_location="cpu")
+            factors = data["factors"]
+            returns = data["returns"]
+            if torch.is_tensor(factors):
+                factors = factors.numpy()
+            if torch.is_tensor(returns):
+                returns = returns.numpy()
+            factors = factors.astype(np.float32)
+            returns = returns.astype(np.float32)
+            T, D, K = factors.shape
+            print(f"  Shape: {T} days, {D} assets, {K} factors")
+        else:
+            print("Generating synthetic data...")
+            factors, returns = generate_synthetic_data(
+                num_days=args.num_days,
+                num_assets=args.num_assets,
+                num_factors=args.num_factors,
+                seed=args.seed,
+            )
+            T, D, K = factors.shape
+            print(f"  Shape: {T} days, {D} assets, {K} factors")
+        split = int(T * 0.8)
+        train_factors, train_returns = factors[:split], returns[:split]
+        test_factors, test_returns = factors[split:], returns[split:]
 
-    # Train/val split (chronological)
-    split = int(T * 0.8)
-    train_factors, train_returns = factors[:split], returns[:split]
-    test_factors, test_returns = factors[split:], returns[split:]
-
-    dataset = SyntheticDataset(train_factors, train_returns)
+    # --- Dataset and loader ---
+    if implicit:
+        dataset = ReturnsOnlyDataset(train_returns)
+    else:
+        dataset = SyntheticDataset(train_factors, train_returns)
     loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -64,25 +95,39 @@ def train(args):
         pin_memory=False,
     )
 
-    # Model and diffusion
-    model = FactorDiT(
-        num_assets=D,
-        num_factors=K,
-        hidden_size=args.hidden_size,
-        depth=args.depth,
-        num_heads=args.num_heads,
-    ).to(device)
+    # --- Model and diffusion ---
     diffusion = GaussianDiffusion(timesteps=args.timesteps).to(device)
+    if implicit:
+        model = UncondDiT(
+            num_assets=D,
+            hidden_size=args.hidden_size,
+            depth=args.depth,
+            num_heads=args.num_heads,
+        ).to(device)
+        strategy_name = "Diffusion"
+    else:
+        K = train_factors.shape[2]
+        model = FactorDiT(
+            num_assets=D,
+            num_factors=K,
+            hidden_size=args.hidden_size,
+            depth=args.depth,
+            num_heads=args.num_heads,
+        ).to(device)
+        strategy_name = "Factordiff"
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    # Training loop
+    # --- Training loop ---
     model.train()
     for epoch in range(args.epochs):
         total_loss = 0
-        for batch_factors, batch_returns in loader:
-            batch_factors = batch_factors.to(device)
-            batch_returns = batch_returns.to(device)
-            loss = diffusion.p_loss(model, batch_returns, batch_factors)
+        for batch in loader:
+            if implicit:
+                batch_returns = batch.to(device)
+                loss = diffusion.p_loss(model, batch_returns, factors=None)
+            else:
+                batch_factors, batch_returns = batch[0].to(device), batch[1].to(device)
+                loss = diffusion.p_loss(model, batch_returns, batch_factors)
             opt.zero_grad()
             loss.backward()
             opt.step()
@@ -90,24 +135,33 @@ def train(args):
         avg_loss = total_loss / len(loader)
         print(f"Epoch {epoch+1}/{args.epochs}  Loss: {avg_loss:.6f}")
 
-    # Evaluation: backtest on test set
+    # --- Evaluation: backtest on test set ---
     model.eval()
     n_test = len(test_returns)
     n_samples = args.n_gen_samples
 
-    # Strategy 1: Factordiff (no transaction costs)
-    factordiff_weights = []
-    for t in range(n_test):
-        f = torch.from_numpy(test_factors[t : t + 1]).float().to(device)
-        f_batch = f.repeat(n_samples, 1, 1)
-        with torch.no_grad():
-            samples = diffusion.sample(model, f_batch, D, device)
-        mu, Sigma = sample_mean_cov(samples.cpu().numpy())
-        w = mean_variance_weights(mu, Sigma, gamma=args.gamma)
-        factordiff_weights.append(w)
-    factordiff_weights = np.array(factordiff_weights)
+    if implicit:
+        factordiff_weights = []
+        for t in range(n_test):
+            with torch.no_grad():
+                samples = diffusion.sample_uncond(model, D, device, n_samples)
+            mu, Sigma = sample_mean_cov(samples.cpu().numpy())
+            w = mean_variance_weights(mu, Sigma, gamma=args.gamma)
+            factordiff_weights.append(w)
+        factordiff_weights = np.array(factordiff_weights)
+    else:
+        factordiff_weights = []
+        for t in range(n_test):
+            f = torch.from_numpy(test_factors[t : t + 1]).float().to(device)
+            f_batch = f.repeat(n_samples, 1, 1)
+            with torch.no_grad():
+                samples = diffusion.sample(model, f_batch, D, device)
+            mu, Sigma = sample_mean_cov(samples.cpu().numpy())
+            w = mean_variance_weights(mu, Sigma, gamma=args.gamma)
+            factordiff_weights.append(w)
+        factordiff_weights = np.array(factordiff_weights)
 
-    # Strategy 2: Empirical
+    # Empirical
     emp_weights = []
     for t in range(n_test):
         hist_returns = train_returns if t == 0 else np.vstack([train_returns, test_returns[:t]])
@@ -117,7 +171,7 @@ def train(args):
         emp_weights.append(w)
     emp_weights = np.array(emp_weights)
 
-    # Strategy 3: Shrinkage
+    # Shrinkage
     shr_weights = []
     for t in range(n_test):
         hist_returns = train_returns if t == 0 else np.vstack([train_returns, test_returns[:t]])
@@ -128,10 +182,8 @@ def train(args):
         shr_weights.append(w)
     shr_weights = np.array(shr_weights)
 
-    # Strategy 4: Equal weight
     ew_weights = np.ones((n_test, D)) / D
 
-    # Compute metrics (no transaction costs)
     def eval_weights(weights):
         return portfolio_metrics(test_returns, weights)
 
@@ -140,22 +192,26 @@ def train(args):
     print("=" * 60)
     for name, w in [
         ("EW", ew_weights),
-        ("Factordiff", factordiff_weights),
+        (strategy_name, factordiff_weights),
         ("Emp", emp_weights),
         ("ShrEmp", shr_weights),
     ]:
         m = eval_weights(w)
         print(f"{name:12}  Mean: {m['mean']:.4f}%  Std: {m['std']:.4f}%  Sharpe: {m['sharpe']:.4f}")
 
-    # With transaction costs
+    # With transaction costs (diffusion strategy)
     buy_cost, sell_cost = 0.00075, 0.00125
     factordiff_weights_tc = []
     omega_prev = np.ones(D) / D
     for t in range(n_test):
-        f = torch.from_numpy(test_factors[t : t + 1]).float().to(device)
-        f_batch = f.repeat(n_samples, 1, 1)
-        with torch.no_grad():
-            samples = diffusion.sample(model, f_batch, D, device)
+        if implicit:
+            with torch.no_grad():
+                samples = diffusion.sample_uncond(model, D, device, n_samples)
+        else:
+            f = torch.from_numpy(test_factors[t : t + 1]).float().to(device)
+            f_batch = f.repeat(n_samples, 1, 1)
+            with torch.no_grad():
+                samples = diffusion.sample(model, f_batch, D, device)
         mu, Sigma = sample_mean_cov(samples.cpu().numpy())
         w = mean_variance_with_transaction_costs(
             mu, Sigma, omega_prev, gamma=args.gamma,
@@ -165,10 +221,8 @@ def train(args):
         omega_prev = w
     factordiff_weights_tc = np.array(factordiff_weights_tc)
 
-    # Deduct transaction costs from returns for Factordiff
     port_ret = np.sum(factordiff_weights_tc * test_returns, axis=1)
     prev_w = np.vstack([np.ones(D) / D, factordiff_weights_tc[:-1]])
-    turnover = np.sum(np.abs(factordiff_weights_tc - prev_w), axis=1)
     tc_per_day = buy_cost * np.sum(np.maximum(factordiff_weights_tc - prev_w, 0), axis=1)
     tc_per_day += sell_cost * np.sum(np.maximum(prev_w - factordiff_weights_tc, 0), axis=1)
     port_ret_net = port_ret - tc_per_day
@@ -178,10 +232,9 @@ def train(args):
         "sharpe": np.mean(port_ret_net) / (np.std(port_ret_net) + 1e-8) * np.sqrt(252),
     }
 
-    print("\nWith transaction costs (Factordiff):")
+    print(f"\nWith transaction costs ({strategy_name}):")
     print(f"  Mean: {m_factordiff_tc['mean']:.4f}%  Std: {m_factordiff_tc['std']:.4f}%  Sharpe: {m_factordiff_tc['sharpe']:.4f}")
 
-    # Save model
     if args.save:
         torch.save({
             "model": model.state_dict(),
@@ -208,6 +261,7 @@ def main():
     parser.add_argument("--save", type=str, default="checkpoint.pt")
     # Data source: .pt file or synthetic
     parser.add_argument("--data_pt", type=str, default=None, help="Path to .pt file with keys 'factors' (T,D,K) and 'returns' (T,D)")
+    parser.add_argument("--implicit", action="store_true", help="Diffac-style: train on returns only, no factors; model learns distribution implicitly")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)

@@ -74,3 +74,20 @@ class SyntheticDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         return self.factors[idx], self.returns[idx]
+
+
+class ReturnsOnlyDataset(torch.utils.data.Dataset):
+    """Dataset of returns only (for implicit-factor / unconditional diffusion)."""
+
+    def __init__(self, returns):
+        """
+        returns: (T, D)
+        """
+        self.returns = torch.from_numpy(returns)
+        self.T = returns.shape[0]
+
+    def __len__(self):
+        return self.T
+
+    def __getitem__(self, idx):
+        return self.returns[idx]

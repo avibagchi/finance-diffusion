@@ -68,9 +68,10 @@ class GaussianDiffusion(nn.Module):
             sqrt_one_minus = sqrt_one_minus.unsqueeze(-1)
         return sqrt_alpha * x_start + sqrt_one_minus * noise
 
-    def p_loss(self, model, x_start, factors, t=None):
+    def p_loss(self, model, x_start, factors=None, t=None):
         """
         Training loss: MSE between true noise and predicted noise.
+        factors: optional (batch, num_assets, num_factors). If None, model is unconditional (UncondDiT).
         """
         batch_size = x_start.shape[0]
         if t is None:
@@ -79,13 +80,17 @@ class GaussianDiffusion(nn.Module):
         noise = torch.randn_like(x_start, device=x_start.device)
         x_noisy = self.q_sample(x_start, t, noise)
 
-        predicted_noise = model(x_noisy, t.float(), factors)
+        if factors is None:
+            predicted_noise = model(x_noisy, t.float())
+        else:
+            predicted_noise = model(x_noisy, t.float(), factors)
         return torch.nn.functional.mse_loss(predicted_noise, noise)
 
     @torch.no_grad()
-    def p_sample(self, model, x, t, factors):
+    def p_sample(self, model, x, t, factors=None):
         """
         Single reverse diffusion step.
+        factors: optional. If None, model is unconditional.
         """
         betas = self.betas[t]
         sqrt_one_minus_alphas_cumprod = self.sqrt_one_minus_alphas_cumprod[t]
@@ -96,8 +101,12 @@ class GaussianDiffusion(nn.Module):
             sqrt_one_minus_alphas_cumprod = sqrt_one_minus_alphas_cumprod.unsqueeze(-1)
             sqrt_recip_alphas = sqrt_recip_alphas.unsqueeze(-1)
 
+        if factors is None:
+            pred = model(x, t.float())
+        else:
+            pred = model(x, t.float(), factors)
         model_mean = sqrt_recip_alphas * (
-            x - betas * model(x, t.float(), factors) / sqrt_one_minus_alphas_cumprod
+            x - betas * pred / sqrt_one_minus_alphas_cumprod
         )
 
         if t[0] == 0:
@@ -112,7 +121,7 @@ class GaussianDiffusion(nn.Module):
     @torch.no_grad()
     def sample(self, model, factors, num_assets, device):
         """
-        Full reverse process: sample from learned distribution.
+        Full reverse process: sample from learned distribution (conditional).
         factors: (batch, num_assets, num_factors)
         returns: (batch, num_assets) - generated return samples
         """
@@ -122,6 +131,20 @@ class GaussianDiffusion(nn.Module):
         for i in reversed(range(self.timesteps)):
             t = torch.full((batch_size,), i, device=device, dtype=torch.long)
             x = self.p_sample(model, x, t, factors)
+
+        return x
+
+    @torch.no_grad()
+    def sample_uncond(self, model, num_assets, device, batch_size):
+        """
+        Full reverse process for unconditional model (no factors).
+        returns: (batch_size, num_assets) - generated return samples
+        """
+        x = torch.randn(batch_size, num_assets, device=device)
+
+        for i in reversed(range(self.timesteps)):
+            t = torch.full((batch_size,), i, device=device, dtype=torch.long)
+            x = self.p_sample(model, x, t, factors=None)
 
         return x
 

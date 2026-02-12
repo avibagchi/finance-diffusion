@@ -25,16 +25,30 @@ def train(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    # Generate synthetic data
-    print("Generating synthetic data...")
-    factors, returns = generate_synthetic_data(
-        num_days=args.num_days,
-        num_assets=args.num_assets,
-        num_factors=args.num_factors,
-        seed=args.seed,
-    )
-    T, D, K = factors.shape
-    print(f"  Shape: {T} days, {D} assets, {K} factors")
+    # Load data: .pt file or synthetic
+    if args.data_pt:
+        print(f"Loading data from {args.data_pt}...")
+        data = torch.load(args.data_pt, map_location="cpu")
+        factors = data["factors"]
+        returns = data["returns"]
+        if torch.is_tensor(factors):
+            factors = factors.numpy()
+        if torch.is_tensor(returns):
+            returns = returns.numpy()
+        factors = factors.astype(np.float32)
+        returns = returns.astype(np.float32)
+        T, D, K = factors.shape
+        print(f"  Shape: {T} days, {D} assets, {K} factors")
+    else:
+        print("Generating synthetic data...")
+        factors, returns = generate_synthetic_data(
+            num_days=args.num_days,
+            num_assets=args.num_assets,
+            num_factors=args.num_factors,
+            seed=args.seed,
+        )
+        T, D, K = factors.shape
+        print(f"  Shape: {T} days, {D} assets, {K} factors")
 
     # Train/val split (chronological)
     split = int(T * 0.8)
@@ -192,6 +206,8 @@ def main():
     parser.add_argument("--n_gen_samples", type=int, default=200)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--save", type=str, default="checkpoint.pt")
+    # Data source: .pt file or synthetic
+    parser.add_argument("--data_pt", type=str, default=None, help="Path to .pt file with keys 'factors' (T,D,K) and 'returns' (T,D)")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)

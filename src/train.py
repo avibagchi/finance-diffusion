@@ -4,10 +4,14 @@ Train Factor-based Conditional Diffusion Model for portfolio optimization.
 Uses synthetic data for demonstration.
 """
 import argparse
+import os
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 from model import FactorDiT, UncondDiT
 from diffusion import GaussianDiffusion
@@ -17,7 +21,9 @@ from portfolio import (
     sample_mean_cov,
     james_stein_shrinkage,
     portfolio_metrics,
+    portfolio_metrics_from_returns,
     mean_variance_with_transaction_costs,
+    drawdown_series,
 )
 
 
@@ -37,7 +43,7 @@ def train(args):
                 returns = returns.numpy()
             returns = returns.astype(np.float32)
             T, D = returns.shape
-            print(f"  Shape: {T} days, {D} assets (no factors)")
+            print(f"  Shape: {T} months, {D} assets (no factors)")
         else:
             print("Generating synthetic data (implicit mode: using returns only)...")
             factors, returns = generate_synthetic_data(
@@ -47,7 +53,7 @@ def train(args):
                 seed=args.seed,
             )
             T, D = returns.shape[0], returns.shape[1]
-            print(f"  Shape: {T} days, {D} assets")
+            print(f"  Shape: {T} months, {D} assets")
         split = int(T * 0.8)
         train_returns = returns[:split]
         test_returns = returns[split:]
@@ -67,7 +73,7 @@ def train(args):
             factors = factors.astype(np.float32)
             returns = returns.astype(np.float32)
             T, D, K = factors.shape
-            print(f"  Shape: {T} days, {D} assets, {K} factors")
+            print(f"  Shape: {T} months, {D} assets, {K} factors")
         else:
             print("Generating synthetic data...")
             factors, returns = generate_synthetic_data(
@@ -77,7 +83,7 @@ def train(args):
                 seed=args.seed,
             )
             T, D, K = factors.shape
-            print(f"  Shape: {T} days, {D} assets, {K} factors")
+            print(f"  Shape: {T} months, {D} assets, {K} factors")
         split = int(T * 0.8)
         train_factors, train_returns = factors[:split], returns[:split]
         test_factors, test_returns = factors[split:], returns[split:]
@@ -140,13 +146,23 @@ def train(args):
     model.eval()
     n_test = len(test_returns)
     n_samples = args.n_gen_samples
+    output_dir = getattr(args, "output_dir", None)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        samples_dir = os.path.join(output_dir, "samples")
+        os.makedirs(samples_dir, exist_ok=True)
+    all_samples_list = []
 
     if implicit:
         factordiff_weights = []
         for t in range(n_test):
             with torch.no_grad():
                 samples = diffusion.sample_uncond(model, D, device, n_samples)
-            mu, Sigma = sample_mean_cov(samples.cpu().numpy())
+            samples_np = samples.cpu().numpy()
+            if output_dir:
+                all_samples_list.append(samples_np)
+                np.save(os.path.join(samples_dir, f"samples_t{t:05d}.npy"), samples_np)
+            mu, Sigma = sample_mean_cov(samples_np)
             w = mean_variance_weights(mu, Sigma, gamma=args.gamma)
             factordiff_weights.append(w)
         factordiff_weights = np.array(factordiff_weights)
@@ -157,10 +173,18 @@ def train(args):
             f_batch = f.repeat(n_samples, 1, 1)
             with torch.no_grad():
                 samples = diffusion.sample(model, f_batch, D, device)
-            mu, Sigma = sample_mean_cov(samples.cpu().numpy())
+            samples_np = samples.cpu().numpy()
+            if output_dir:
+                all_samples_list.append(samples_np)
+                np.save(os.path.join(samples_dir, f"samples_t{t:05d}.npy"), samples_np)
+            mu, Sigma = sample_mean_cov(samples_np)
             w = mean_variance_weights(mu, Sigma, gamma=args.gamma)
             factordiff_weights.append(w)
         factordiff_weights = np.array(factordiff_weights)
+
+    if output_dir and all_samples_list:
+        np.savez(os.path.join(output_dir, "samples_all.npz"), *all_samples_list)
+        print(f"\nSamples saved to {samples_dir} and {os.path.join(output_dir, 'samples_all.npz')}")
 
     # Empirical
     emp_weights = []
@@ -184,21 +208,24 @@ def train(args):
     shr_weights = np.array(shr_weights)
 
     ew_weights = np.ones((n_test, D)) / D
+    ew_returns = np.sum(ew_weights * test_returns, axis=1)
 
-    def eval_weights(weights):
-        return portfolio_metrics(test_returns, weights)
+    def eval_weights(weights, benchmark=None):
+        return portfolio_metrics(test_returns, weights, benchmark_returns=benchmark)
 
     print("\n" + "=" * 60)
     print("Portfolio Performance (no transaction costs)")
     print("=" * 60)
+    metrics_list = []
     for name, w in [
         ("EW", ew_weights),
         (strategy_name, factordiff_weights),
         ("Emp", emp_weights),
         ("ShrEmp", shr_weights),
     ]:
-        m = eval_weights(w)
-        print(f"{name:12}  Mean: {m['mean']:.4f}%  Std: {m['std']:.4f}%  Sharpe: {m['sharpe']:.4f}")
+        m = eval_weights(w, benchmark=ew_returns)
+        metrics_list.append((name, m))
+        print(f"{name:12}  Mean: {m['mean']:.4f}%  Std: {m['std']:.4f}%  Sharpe: {m['sharpe']:.4f}  Sortino: {m['sortino']:.4f}  Calmar: {m['calmar']:.4f}  RtC: {m['rtc']:.4f}")
 
     # With transaction costs (diffusion strategy)
     buy_cost, sell_cost = 0.00075, 0.00125
@@ -224,17 +251,13 @@ def train(args):
 
     port_ret = np.sum(factordiff_weights_tc * test_returns, axis=1)
     prev_w = np.vstack([np.ones(D) / D, factordiff_weights_tc[:-1]])
-    tc_per_day = buy_cost * np.sum(np.maximum(factordiff_weights_tc - prev_w, 0), axis=1)
-    tc_per_day += sell_cost * np.sum(np.maximum(prev_w - factordiff_weights_tc, 0), axis=1)
-    port_ret_net = port_ret - tc_per_day
-    m_factordiff_tc = {
-        "mean": np.mean(port_ret_net) * 100,
-        "std": np.std(port_ret_net) * 100,
-        "sharpe": np.mean(port_ret_net) / (np.std(port_ret_net) + 1e-8) * np.sqrt(12),
-    }
+    tc_per_month = buy_cost * np.sum(np.maximum(factordiff_weights_tc - prev_w, 0), axis=1)
+    tc_per_month += sell_cost * np.sum(np.maximum(prev_w - factordiff_weights_tc, 0), axis=1)
+    port_ret_net = port_ret - tc_per_month
+    m_factordiff_tc = portfolio_metrics_from_returns(port_ret_net, benchmark_returns=ew_returns)
 
     print(f"\nWith transaction costs ({strategy_name}):")
-    print(f"  Mean: {m_factordiff_tc['mean']:.4f}%  Std: {m_factordiff_tc['std']:.4f}%  Sharpe: {m_factordiff_tc['sharpe']:.4f}")
+    print(f"  Mean: {m_factordiff_tc['mean']:.4f}%  Std: {m_factordiff_tc['std']:.4f}%  Sharpe: {m_factordiff_tc['sharpe']:.4f}  Sortino: {m_factordiff_tc['sortino']:.4f}  Calmar: {m_factordiff_tc['calmar']:.4f}  RtC: {m_factordiff_tc['rtc']:.4f}")
 
     if args.save:
         torch.save({
@@ -242,6 +265,84 @@ def train(args):
             "args": vars(args),
         }, args.save)
         print(f"\nModel saved to {args.save}")
+
+    # Plots (if output_dir specified)
+    if output_dir:
+        plots_dir = os.path.join(output_dir, "plots")
+        os.makedirs(plots_dir, exist_ok=True)
+
+        strategies = [
+            ("EW", ew_weights),
+            (strategy_name, factordiff_weights),
+            ("Emp", emp_weights),
+            ("ShrEmp", shr_weights),
+        ]
+        port_returns_dict = {
+            name: np.sum(w * test_returns, axis=1) for name, w in strategies
+        }
+
+        # 1. Cumulative returns
+        fig, ax = plt.subplots(figsize=(10, 6))
+        for name, rets in port_returns_dict.items():
+            cum = np.cumprod(1 + rets) - 1
+            ax.plot(cum * 100, label=name)
+        ax.set_xlabel("Month")
+        ax.set_ylabel("Cumulative Return (%)")
+        ax.set_title("Cumulative Returns by Strategy")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.savefig(os.path.join(plots_dir, "cumulative_returns.pdf"), bbox_inches="tight")
+        plt.close()
+
+        # 2. Drawdown
+        fig, ax = plt.subplots(figsize=(10, 6))
+        for name, rets in port_returns_dict.items():
+            dd = drawdown_series(rets)
+            ax.plot(dd, label=name)
+        ax.set_xlabel("Month")
+        ax.set_ylabel("Drawdown (%)")
+        ax.set_title("Drawdown by Strategy")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.savefig(os.path.join(plots_dir, "drawdown.pdf"), bbox_inches="tight")
+        plt.close()
+
+        # 3. Metrics bar chart
+        metric_names = ["sharpe", "sortino", "calmar", "rtc"]
+        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+        axes = axes.flatten()
+        for idx, metric in enumerate(metric_names):
+            ax = axes[idx]
+            names = [m[0] for m in metrics_list]
+            values = [m[1][metric] for m in metrics_list]
+            bars = ax.bar(names, values, color=["#2ecc71", "#3498db", "#e74c3c", "#9b59b6"][: len(names)])
+            ax.set_ylabel(metric.capitalize())
+            ax.set_title(metric.capitalize())
+            ax.grid(True, alpha=0.3, axis="y")
+        fig.suptitle("Portfolio Metrics Comparison", fontsize=14)
+        fig.tight_layout()
+        fig.savefig(os.path.join(plots_dir, "metrics_comparison.pdf"), bbox_inches="tight")
+        plt.close()
+
+        # TC strategy cumulative and drawdown
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+        cum_tc = np.cumprod(1 + port_ret_net) - 1
+        ax1.plot(cum_tc * 100, label=f"{strategy_name} (with TC)", color="darkgreen")
+        ax1.set_ylabel("Cumulative Return (%)")
+        ax1.set_title(f"{strategy_name} with Transaction Costs")
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        dd_tc = drawdown_series(port_ret_net)
+        ax2.plot(dd_tc, color="darkgreen")
+        ax2.set_xlabel("Month")
+        ax2.set_ylabel("Drawdown (%)")
+        ax2.set_title("Drawdown (with TC)")
+        ax2.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(os.path.join(plots_dir, "factordiff_tc.pdf"), bbox_inches="tight")
+        plt.close()
+
+        print(f"\nPlots saved to {plots_dir}")
 
 
 def main():
@@ -260,6 +361,7 @@ def main():
     parser.add_argument("--n_gen_samples", type=int, default=200)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--save", type=str, default="checkpoint.pt")
+    parser.add_argument("--output_dir", type=str, default=None, help="Directory for samples, plots; if set, saves samples and PDFs")
     # Data source: .pt file or synthetic
     parser.add_argument("--data_pt", type=str, default=None, help="Path to .pt file with keys 'factors' (T,D,K) and 'returns' (T,D)")
     parser.add_argument("--implicit", action="store_true", help="Diffac-style: train on returns only, no factors; model learns distribution implicitly")

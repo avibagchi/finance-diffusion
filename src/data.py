@@ -46,7 +46,7 @@ def generate_synthetic_data(
     # So at time t we have factors[t] and want to predict returns[t] (which is R_{t+1} in paper notation)
     # Our data: (factors[t], returns[t]) for t=0..T-1
     factors = factors[:-1]  # (T, D, K) - factors at start of period
-    # Standardize factors across stocks each day
+    # Standardize factors across stocks each month
     for t in range(T):
         f = factors[t]
         factors[t] = (f - np.mean(f)) / (np.std(f) + 1e-8)

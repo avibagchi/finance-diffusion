@@ -1,6 +1,6 @@
 # Factor-Based Conditional Diffusion Model for Portfolio Optimization
 
-Implementation of the NeurIPS 2025 workshop paper "Factor-Based Conditional Diffusion Model for Portfolio Optimization" (Gao et al.). The model learns the cross-sectional distribution of next-day stock returns conditioned on asset-specific factors, using a Diffusion Transformer (DiT) with token-wise conditioning.
+Implementation of the NeurIPS 2025 workshop paper "Factor-Based Conditional Diffusion Model for Portfolio Optimization" (Gao et al.). The model learns the cross-sectional distribution of next-month stock returns conditioned on asset-specific factors, using a Diffusion Transformer (DiT) with token-wise conditioning.
 
 ## Overview
 
@@ -25,7 +25,7 @@ python train.py
 Options:
 
 ```
---num_days 500        # Days of synthetic data
+--num_months 500      # Months of synthetic data
 --num_assets 20       # Number of assets (stocks)
 --num_factors 10      # Number of factors per asset
 --epochs 50           # Training epochs

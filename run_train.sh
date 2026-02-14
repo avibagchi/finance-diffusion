@@ -40,12 +40,14 @@ GAMMA=${GAMMA:-100.0}
 N_GEN_SAMPLES=${N_GEN_SAMPLES:-200}
 SEED=${SEED:-42}
 SAVE=${SAVE:-checkpoint.pt}
+OUTPUT_DIR=${OUTPUT_DIR:-}
 DATA_PT=${DATA_PT:-/work/nvme/bemc/abagchi2/finance-diffusion/data/data.pt}
 IMPLICIT=${IMPLICIT:-0}
 
 # Optional args: --data_pt when DATA_PT set, --implicit when IMPLICIT=1
 EXTRA_ARGS=()
 [ -n "$DATA_PT" ] && EXTRA_ARGS+=(--data_pt "$DATA_PT")
+[ -n "$OUTPUT_DIR" ] && EXTRA_ARGS+=(--output_dir "$OUTPUT_DIR")
 [ "$IMPLICIT" = "1" ] || [ "$IMPLICIT" = "true" ] || [ "$IMPLICIT" = "yes" ] && EXTRA_ARGS+=(--implicit)
 
 # Omit num_months/num_assets/num_factors when using data file (use all from file)

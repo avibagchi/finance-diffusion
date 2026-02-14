@@ -104,19 +104,97 @@ def james_stein_shrinkage(mu, Sigma, shrinkage_target="mean"):
     return mu, Sigma_shrunk
 
 
-def portfolio_metrics(returns, weights_sequence):
+def _max_drawdown(cumulative_returns):
+    """Compute max drawdown from cumulative returns (1 + r_1)(1 + r_2)..."""
+    cumprod = np.cumprod(1 + cumulative_returns)
+    running_max = np.maximum.accumulate(cumprod)
+    drawdowns = (cumprod - running_max) / (running_max + 1e-10)
+    return np.min(drawdowns) * 100  # as %
+
+
+def drawdown_series(returns):
+    """Return drawdown series (T,) in percent for plotting."""
+    port_returns = np.asarray(returns).flatten()
+    cumprod = np.cumprod(1 + port_returns)
+    running_max = np.maximum.accumulate(cumprod)
+    drawdowns = (cumprod - running_max) / (running_max + 1e-10) * 100
+    return drawdowns
+
+
+def _cvar(returns, alpha=0.05):
+    """Conditional VaR (Expected Shortfall) at alpha level."""
+    var_idx = int(np.ceil(alpha * len(returns))) - 1
+    var_idx = max(0, var_idx)
+    sorted_ret = np.sort(returns)
+    return np.mean(sorted_ret[: var_idx + 1]) * 100 if var_idx >= 0 else 0
+
+
+def portfolio_metrics(returns, weights_sequence, benchmark_returns=None):
     """
-    Compute portfolio metrics from daily returns and weight sequence.
-    returns: (T, D) - realized returns each day
-    weights_sequence: (T, D) - portfolio weights each day (omega at start of day)
+    Compute portfolio metrics from monthly returns and weight sequence.
+    returns: (T, D) - realized returns each month
+    weights_sequence: (T, D) - portfolio weights each month (omega at start of month)
+    benchmark_returns: (T,) optional - for RtC (Return to Capture) calculation
     """
-    # Portfolio return at t = omega_{t-1}' * r_t (we use weights from previous close)
-    # Simplified: assume weights at t are applied to returns at t
     port_returns = np.sum(weights_sequence * returns, axis=1)
     mean_ret = np.mean(port_returns) * 100  # in %
     std_ret = np.std(port_returns) * 100
     sharpe = mean_ret / std_ret * np.sqrt(12) if std_ret > 0 else 0  # annualized
+
     neg_returns = port_returns[port_returns < 0]
     neg_std = np.std(neg_returns) if len(neg_returns) >= 2 else 0
     sortino = mean_ret / neg_std * np.sqrt(12) if neg_std > 0 else sharpe
-    return {"mean": mean_ret, "std": std_ret, "sharpe": sharpe, "sortino": sortino}
+
+    max_dd = _max_drawdown(port_returns)
+    ann_ret_pct = mean_ret * 12  # approx annualized return in %
+    calmar = ann_ret_pct / (abs(max_dd) + 1e-10) if max_dd < 0 else 0  # annualized ret / |max_dd|%
+
+    cvar_05 = _cvar(port_returns, alpha=0.05)
+    rtc = mean_ret / (abs(cvar_05) + 1e-10) if cvar_05 < 0 else 0  # Return to CVaR (tail risk)
+    if benchmark_returns is not None:
+        up_bench = benchmark_returns > 0
+        dn_bench = benchmark_returns < 0
+        upside_capture = (
+            np.mean(port_returns[up_bench]) / (np.mean(benchmark_returns[up_bench]) + 1e-10) * 100
+            if np.any(up_bench) else 0
+        )
+        downside_capture = (
+            np.mean(port_returns[dn_bench]) / (np.mean(benchmark_returns[dn_bench]) + 1e-10) * 100
+            if np.any(dn_bench) else 0
+        )
+        rtc = upside_capture - downside_capture  # Return to Capture spread (upside - downside)
+
+    return {"mean": mean_ret, "std": std_ret, "sharpe": sharpe, "sortino": sortino, "calmar": calmar, "rtc": rtc}
+
+
+def portfolio_metrics_from_returns(port_returns, benchmark_returns=None):
+    """
+    Compute portfolio metrics from raw portfolio return series.
+    port_returns: (T,) - portfolio returns each period (e.g. after transaction costs)
+    benchmark_returns: (T,) optional - for RtC
+    """
+    port_returns = np.asarray(port_returns).flatten()
+    mean_ret = np.mean(port_returns) * 100
+    std_ret = np.std(port_returns) * 100
+    sharpe = mean_ret / std_ret * np.sqrt(12) if std_ret > 0 else 0
+    neg_returns = port_returns[port_returns < 0]
+    neg_std = np.std(neg_returns) * 100 if len(neg_returns) >= 2 else 0
+    sortino = mean_ret / neg_std * np.sqrt(12) if neg_std > 0 else sharpe
+    max_dd = _max_drawdown(port_returns)
+    ann_ret_pct = mean_ret * 12
+    calmar = ann_ret_pct / (abs(max_dd) + 1e-10) if max_dd < 0 else 0
+    cvar_05 = _cvar(port_returns, alpha=0.05)
+    rtc = mean_ret / (abs(cvar_05) + 1e-10) if cvar_05 < 0 else 0
+    if benchmark_returns is not None:
+        up_bench = benchmark_returns > 0
+        dn_bench = benchmark_returns < 0
+        upside_capture = (
+            np.mean(port_returns[up_bench]) / (np.mean(benchmark_returns[up_bench]) + 1e-10) * 100
+            if np.any(up_bench) else 0
+        )
+        downside_capture = (
+            np.mean(port_returns[dn_bench]) / (np.mean(benchmark_returns[dn_bench]) + 1e-10) * 100
+            if np.any(dn_bench) else 0
+        )
+        rtc = upside_capture - downside_capture
+    return {"mean": mean_ret, "std": std_ret, "sharpe": sharpe, "sortino": sortino, "calmar": calmar, "rtc": rtc}

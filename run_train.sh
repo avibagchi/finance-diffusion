@@ -40,19 +40,22 @@ GAMMA=${GAMMA:-100.0}
 N_GEN_SAMPLES=${N_GEN_SAMPLES:-200}
 SEED=${SEED:-42}
 SAVE=${SAVE:-checkpoint.pt}
-OUTPUT_DIR=${OUTPUT_DIR:-}
-DATA_PT=${DATA_PT:-/work/nvme/bemc/abagchi2/finance-diffusion/data/data.pt}
+OUTPUT_DIR=${OUTPUT_DIR:-results}
+DATA_PT=${DATA_PT:-/work/nvme/bemc/abagchi2/finance-diffusion/data/data_clean.pt}
 IMPLICIT=${IMPLICIT:-0}
+USE_SCORE_DECOMP=${USE_SCORE_DECOMP:-0}
 
 # Optional args: --data_pt when DATA_PT set, --implicit when IMPLICIT=1
 EXTRA_ARGS=()
 [ -n "$DATA_PT" ] && EXTRA_ARGS+=(--data_pt "$DATA_PT")
 [ -n "$OUTPUT_DIR" ] && EXTRA_ARGS+=(--output_dir "$OUTPUT_DIR")
 [ "$IMPLICIT" = "1" ] || [ "$IMPLICIT" = "true" ] || [ "$IMPLICIT" = "yes" ] && EXTRA_ARGS+=(--implicit)
+[ "$USE_SCORE_DECOMP" = "1" ] || [ "$USE_SCORE_DECOMP" = "true" ] || [ "$USE_SCORE_DECOMP" = "yes" ] && EXTRA_ARGS+=(--use_score_decomp)
 
-# Omit num_months/num_assets/num_factors when using data file (use all from file)
+# Omit num_months/num_assets when using data file; num_factors still needed for implicit (Diffac) model dim
 DATA_ARGS=()
 [ -z "$DATA_PT" ] && DATA_ARGS+=(--num_months "$NUM_MONTHS" --num_assets "$NUM_ASSETS" --num_factors "$NUM_FACTORS")
+[ -n "$DATA_PT" ] && { [ "$IMPLICIT" = "1" ] || [ "$IMPLICIT" = "true" ] || [ "$IMPLICIT" = "yes" ]; } && DATA_ARGS+=(--num_factors "$NUM_FACTORS")
 
 SRC_DIR="${PROJECT_DIR}/src"
 cd "$SRC_DIR"

@@ -14,6 +14,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from model import FactorDiT, UncondDiT
+from diffac_model import DiffacImplicitDiT
 from diffusion import GaussianDiffusion
 from data import generate_synthetic_data, SyntheticDataset, ReturnsOnlyDataset
 from portfolio import (
@@ -103,14 +104,26 @@ def train(args):
 
     # --- Model and diffusion ---
     diffusion = GaussianDiffusion(timesteps=args.timesteps).to(device)
+    use_score_decomp = getattr(args, "use_score_decomp", False)
     if implicit:
-        model = UncondDiT(
-            num_assets=D,
-            hidden_size=args.hidden_size,
-            depth=args.depth,
-            num_heads=args.num_heads,
-        ).to(device)
-        strategy_name = "Diffusion"
+        if use_score_decomp:
+            # Diffac-style: score decomposition (Chen et al. 2025)
+            K_implicit = min(max(1, args.num_factors), D - 1)  # latent factor dim k
+            model = DiffacImplicitDiT(
+                num_assets=D,
+                num_factors=K_implicit,
+                hidden_size=args.hidden_size,
+                timesteps=args.timesteps,
+            ).to(device)
+            strategy_name = "Diffac"
+        else:
+            model = UncondDiT(
+                num_assets=D,
+                hidden_size=args.hidden_size,
+                depth=args.depth,
+                num_heads=args.num_heads,
+            ).to(device)
+            strategy_name = "Diffusion"
     else:
         K = train_factors.shape[2]
         model = FactorDiT(
@@ -271,6 +284,12 @@ def train(args):
         plots_dir = os.path.join(output_dir, "plots")
         os.makedirs(plots_dir, exist_ok=True)
 
+        # Suffix from key hyperparameters to avoid overwriting
+        implicit = getattr(args, "implicit", False)
+        use_sd = getattr(args, "use_score_decomp", False)
+        lr_str = str(args.lr).replace(".", "p").replace("-", "m")
+        hp_suffix = f"_im{int(implicit)}_sd{int(use_sd)}_k{args.num_factors}_h{args.hidden_size}_d{args.depth}_e{args.epochs}_lr{lr_str}"
+
         strategies = [
             ("EW", ew_weights),
             (strategy_name, factordiff_weights),
@@ -291,7 +310,7 @@ def train(args):
         ax.set_title("Cumulative Returns by Strategy")
         ax.legend()
         ax.grid(True, alpha=0.3)
-        fig.savefig(os.path.join(plots_dir, "cumulative_returns.pdf"), bbox_inches="tight")
+        fig.savefig(os.path.join(plots_dir, f"cumulative_returns{hp_suffix}.pdf"), bbox_inches="tight")
         plt.close()
 
         # 2. Drawdown
@@ -304,7 +323,7 @@ def train(args):
         ax.set_title("Drawdown by Strategy")
         ax.legend()
         ax.grid(True, alpha=0.3)
-        fig.savefig(os.path.join(plots_dir, "drawdown.pdf"), bbox_inches="tight")
+        fig.savefig(os.path.join(plots_dir, f"drawdown{hp_suffix}.pdf"), bbox_inches="tight")
         plt.close()
 
         # 3. Metrics bar chart
@@ -321,7 +340,7 @@ def train(args):
             ax.grid(True, alpha=0.3, axis="y")
         fig.suptitle("Portfolio Metrics Comparison", fontsize=14)
         fig.tight_layout()
-        fig.savefig(os.path.join(plots_dir, "metrics_comparison.pdf"), bbox_inches="tight")
+        fig.savefig(os.path.join(plots_dir, f"metrics_comparison{hp_suffix}.pdf"), bbox_inches="tight")
         plt.close()
 
         # TC strategy cumulative and drawdown
@@ -339,7 +358,7 @@ def train(args):
         ax2.set_title("Drawdown (with TC)")
         ax2.grid(True, alpha=0.3)
         fig.tight_layout()
-        fig.savefig(os.path.join(plots_dir, "factordiff_tc.pdf"), bbox_inches="tight")
+        fig.savefig(os.path.join(plots_dir, f"factordiff_tc{hp_suffix}.pdf"), bbox_inches="tight")
         plt.close()
 
         print(f"\nPlots saved to {plots_dir}")
@@ -364,7 +383,8 @@ def main():
     parser.add_argument("--output_dir", type=str, default=None, help="Directory for samples, plots; if set, saves samples and PDFs")
     # Data source: .pt file or synthetic
     parser.add_argument("--data_pt", type=str, default=None, help="Path to .pt file with keys 'factors' (T,D,K) and 'returns' (T,D)")
-    parser.add_argument("--implicit", action="store_true", help="Diffac-style: train on returns only, no factors; model learns distribution implicitly")
+    parser.add_argument("--implicit", action="store_true", help="Train on returns only, no factors; model learns distribution implicitly")
+    parser.add_argument("--use_score_decomp", action="store_true", help="Use score decomposition (diffac) for implicit mode; requires --implicit")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)

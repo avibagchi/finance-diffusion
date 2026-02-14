@@ -11,11 +11,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_SCRIPT="${SCRIPT_DIR}/run_train.sh"
 
 # Array of num_factors values to sweep (edit or override with env var)
-NUM_FACTORS_ARR=(${NUM_FACTORS_ARR:-0 10 25 50 75 100 150 200 250 300 350})
-
+NUM_FACTORS_ARR=(${NUM_FACTORS_ARR:-10 150 350})
+# 0 10 25 50 75 100 150 200 250 300 350
 # Base settings (override with env when running)
-IMPLICIT=${IMPLICIT:-1}
-USE_SCORE_DECOMP=${USE_SCORE_DECOMP:-1}
+IMPLICIT=${IMPLICIT:-0}
+USE_SCORE_DECOMP=${USE_SCORE_DECOMP:-0}
 DATA_PT=${DATA_PT:-/work/nvme/bemc/abagchi2/finance-diffusion/data/data_clean.pt}
 RESULTS_BASE=${RESULTS_BASE:-${SCRIPT_DIR}/sweep_results}
 

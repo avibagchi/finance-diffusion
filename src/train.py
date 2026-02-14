@@ -301,30 +301,39 @@ def train(args):
         }
 
         # 1. Cumulative returns
-        fig, ax = plt.subplots(figsize=(10, 6))
+        cum_data = {}
         for name, rets in port_returns_dict.items():
             cum = np.cumprod(1 + rets) - 1
-            ax.plot(cum * 100, label=name)
+            cum_data[name] = cum * 100
+        fig, ax = plt.subplots(figsize=(10, 6))
+        for name, cum in cum_data.items():
+            ax.plot(cum, label=name)
         ax.set_xlabel("Month")
         ax.set_ylabel("Cumulative Return (%)")
         ax.set_title("Cumulative Returns by Strategy")
         ax.legend()
         ax.grid(True, alpha=0.3)
-        fig.savefig(os.path.join(plots_dir, f"cumulative_returns{hp_suffix}.pdf"), bbox_inches="tight")
+        base = os.path.join(plots_dir, f"cumulative_returns{hp_suffix}")
+        fig.savefig(base + ".pdf", bbox_inches="tight")
         plt.close()
-
-        # 2. Drawdown
+        cols = ["Month"] + list(cum_data.keys())
+        arr = np.column_stack([np.arange(len(cum_data[list(cum_data)[0]])), *[cum_data[n] for n in cum_data]])
+        np.savetxt(base + ".csv", arr, delimiter=",", header=",".join(cols), comments="")
+        dd_data = {name: drawdown_series(rets) for name, rets in port_returns_dict.items()}
         fig, ax = plt.subplots(figsize=(10, 6))
-        for name, rets in port_returns_dict.items():
-            dd = drawdown_series(rets)
+        for name, dd in dd_data.items():
             ax.plot(dd, label=name)
         ax.set_xlabel("Month")
         ax.set_ylabel("Drawdown (%)")
         ax.set_title("Drawdown by Strategy")
         ax.legend()
         ax.grid(True, alpha=0.3)
-        fig.savefig(os.path.join(plots_dir, f"drawdown{hp_suffix}.pdf"), bbox_inches="tight")
+        base = os.path.join(plots_dir, f"drawdown{hp_suffix}")
+        fig.savefig(base + ".pdf", bbox_inches="tight")
         plt.close()
+        cols = ["Month"] + list(dd_data.keys())
+        arr = np.column_stack([np.arange(len(dd_data[list(dd_data)[0]])), *[dd_data[n] for n in dd_data]])
+        np.savetxt(base + ".csv", arr, delimiter=",", header=",".join(cols), comments="")
 
         # 3. Metrics bar chart
         metric_names = ["sharpe", "sortino", "calmar", "rtc"]
@@ -340,28 +349,35 @@ def train(args):
             ax.grid(True, alpha=0.3, axis="y")
         fig.suptitle("Portfolio Metrics Comparison", fontsize=14)
         fig.tight_layout()
-        fig.savefig(os.path.join(plots_dir, f"metrics_comparison{hp_suffix}.pdf"), bbox_inches="tight")
+        base = os.path.join(plots_dir, f"metrics_comparison{hp_suffix}")
+        fig.savefig(base + ".pdf", bbox_inches="tight")
         plt.close()
+        metrics_arr = np.array([[m[1][mn] for mn in metric_names] for m in metrics_list])
+        metrics_names_col = np.array([m[0] for m in metrics_list], dtype=object).reshape(-1, 1)
+        np.savetxt(base + ".csv", np.hstack([metrics_names_col, metrics_arr]), delimiter=",", fmt="%s", header="Strategy," + ",".join(metric_names), comments="")
 
         # TC strategy cumulative and drawdown
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
         cum_tc = np.cumprod(1 + port_ret_net) - 1
+        dd_tc = drawdown_series(port_ret_net)
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
         ax1.plot(cum_tc * 100, label=f"{strategy_name} (with TC)", color="darkgreen")
         ax1.set_ylabel("Cumulative Return (%)")
         ax1.set_title(f"{strategy_name} with Transaction Costs")
         ax1.legend()
         ax1.grid(True, alpha=0.3)
-        dd_tc = drawdown_series(port_ret_net)
         ax2.plot(dd_tc, color="darkgreen")
         ax2.set_xlabel("Month")
         ax2.set_ylabel("Drawdown (%)")
         ax2.set_title("Drawdown (with TC)")
         ax2.grid(True, alpha=0.3)
         fig.tight_layout()
-        fig.savefig(os.path.join(plots_dir, f"factordiff_tc{hp_suffix}.pdf"), bbox_inches="tight")
+        base = os.path.join(plots_dir, f"factordiff_tc{hp_suffix}")
+        fig.savefig(base + ".pdf", bbox_inches="tight")
         plt.close()
+        tc_arr = np.column_stack([np.arange(len(cum_tc)), cum_tc * 100, dd_tc])
+        np.savetxt(base + ".csv", tc_arr, delimiter=",", header="Month,cumulative_return_pct,drawdown_pct", comments="")
 
-        print(f"\nPlots saved to {plots_dir}")
+        print(f"\nPlots and CSV data saved to {plots_dir}")
 
 
 def main():

@@ -377,6 +377,58 @@ def train(args):
         tc_arr = np.column_stack([np.arange(len(cum_tc)), cum_tc * 100, dd_tc])
         np.savetxt(base + ".csv", tc_arr, delimiter=",", header="Month,cumulative_return_pct,drawdown_pct", comments="")
 
+        # 5. Weight evolution over time (heatmaps and concentration)
+        n_test, D = factordiff_weights.shape
+        max_assets_heatmap = min(25, D)
+
+        # 5a. Heatmap: top assets by mean weight for each strategy
+        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+        axes = axes.flatten()
+        for idx, (name, w) in enumerate(strategies):
+            ax = axes[idx]
+            mean_w = np.mean(w, axis=0)
+            top_idx = np.argsort(mean_w)[::-1][:max_assets_heatmap]
+            w_top = w[:, top_idx].T
+            im = ax.imshow(w_top * 100, aspect="auto", cmap="viridis", vmin=0, vmax=np.percentile(w * 100, 99))
+            ax.set_xlabel("Month")
+            ax.set_ylabel("Asset (top by mean weight)")
+            ax.set_title(f"Weights: {name}")
+            ax.set_yticks(np.arange(max_assets_heatmap))
+            ax.set_yticklabels([str(i) for i in range(max_assets_heatmap)])
+            plt.colorbar(im, ax=ax, label="Weight (%)")
+        fig.suptitle("Portfolio Weight Evolution by Strategy (top assets)", fontsize=12)
+        fig.tight_layout()
+        base = os.path.join(plots_dir, f"weights_heatmap{hp_suffix}")
+        fig.savefig(base + ".pdf", bbox_inches="tight")
+        plt.close()
+
+        # 5b. Concentration (HHI = sum of squared weights) over time
+        hhi_data = {}
+        for name, w in strategies:
+            hhi = np.sum(w ** 2, axis=1) * 10000
+            hhi_data[name] = hhi
+        fig, ax = plt.subplots(figsize=(10, 6))
+        for name, hhi in hhi_data.items():
+            ax.plot(hhi, label=name)
+        ax.set_xlabel("Month")
+        ax.set_ylabel("Concentration (HHI × 10⁴)")
+        ax.set_title("Portfolio Concentration Over Time (HHI)")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        base = os.path.join(plots_dir, f"weights_concentration{hp_suffix}")
+        fig.savefig(base + ".pdf", bbox_inches="tight")
+        plt.close()
+        cols = ["Month"] + list(hhi_data.keys())
+        arr = np.column_stack([np.arange(n_test), *[hhi_data[n] for n in hhi_data]])
+        np.savetxt(base + ".csv", arr, delimiter=",", header=",".join(cols), comments="")
+
+        # 5c. Full weight matrices as CSV (one per strategy)
+        for name, w in strategies:
+            cols_w = ["Month"] + [f"Asset_{j}" for j in range(D)]
+            arr_w = np.column_stack([np.arange(n_test), w])
+            base_w = os.path.join(plots_dir, f"weights_{name.lower().replace(' ', '_')}{hp_suffix}")
+            np.savetxt(base_w + ".csv", arr_w, delimiter=",", header=",".join(cols_w), comments="")
+
         print(f"\nPlots and CSV data saved to {plots_dir}")
 
 

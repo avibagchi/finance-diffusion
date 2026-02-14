@@ -41,7 +41,7 @@ def train(args):
         else:
             print("Generating synthetic data (implicit mode: using returns only)...")
             factors, returns = generate_synthetic_data(
-                num_days=args.num_days,
+                num_months=args.num_months,
                 num_assets=args.num_assets,
                 num_factors=args.num_factors,
                 seed=args.seed,
@@ -71,7 +71,7 @@ def train(args):
         else:
             print("Generating synthetic data...")
             factors, returns = generate_synthetic_data(
-                num_days=args.num_days,
+                num_months=args.num_months,
                 num_assets=args.num_assets,
                 num_factors=args.num_factors,
                 seed=args.seed,
@@ -130,6 +130,7 @@ def train(args):
                 loss = diffusion.p_loss(model, batch_returns, batch_factors)
             opt.zero_grad()
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             opt.step()
             total_loss += loss.item()
         avg_loss = total_loss / len(loader)
@@ -229,7 +230,7 @@ def train(args):
     m_factordiff_tc = {
         "mean": np.mean(port_ret_net) * 100,
         "std": np.std(port_ret_net) * 100,
-        "sharpe": np.mean(port_ret_net) / (np.std(port_ret_net) + 1e-8) * np.sqrt(252),
+        "sharpe": np.mean(port_ret_net) / (np.std(port_ret_net) + 1e-8) * np.sqrt(12),
     }
 
     print(f"\nWith transaction costs ({strategy_name}):")
@@ -245,7 +246,7 @@ def train(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_days", type=int, default=500)
+    parser.add_argument("--num_months", type=int, default=500)
     parser.add_argument("--num_assets", type=int, default=20)
     parser.add_argument("--num_factors", type=int, default=10)
     parser.add_argument("--hidden_size", type=int, default=256)
@@ -254,7 +255,7 @@ def main():
     parser.add_argument("--timesteps", type=int, default=1000)
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--lr", type=float, default=3e-3)
+    parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--gamma", type=float, default=100.0)
     parser.add_argument("--n_gen_samples", type=int, default=200)
     parser.add_argument("--seed", type=int, default=42)

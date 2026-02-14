@@ -7,7 +7,7 @@ import torch
 
 
 def generate_synthetic_data(
-    num_days=500,
+    num_months=500,
     num_assets=20,
     num_factors=10,
     factor_loading_scale=0.1,
@@ -19,7 +19,7 @@ def generate_synthetic_data(
     Returns: factors (T, D, K), returns (T, D)
     """
     np.random.seed(seed)
-    T, D, K = num_days, num_assets, num_factors
+    T, D, K = num_months, num_assets, num_factors
 
     # Factor loadings: each asset has random exposure to factors
     # f(X) ≈ X @ beta (linear factor model)

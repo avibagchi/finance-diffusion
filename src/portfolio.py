@@ -115,6 +115,8 @@ def portfolio_metrics(returns, weights_sequence):
     port_returns = np.sum(weights_sequence * returns, axis=1)
     mean_ret = np.mean(port_returns) * 100  # in %
     std_ret = np.std(port_returns) * 100
-    sharpe = mean_ret / std_ret * np.sqrt(252) if std_ret > 0 else 0  # annualized
-    sortino = mean_ret / np.std(port_returns[port_returns < 0]) * np.sqrt(252) if np.any(port_returns < 0) else sharpe
+    sharpe = mean_ret / std_ret * np.sqrt(12) if std_ret > 0 else 0  # annualized
+    neg_returns = port_returns[port_returns < 0]
+    neg_std = np.std(neg_returns) if len(neg_returns) >= 2 else 0
+    sortino = mean_ret / neg_std * np.sqrt(12) if neg_std > 0 else sharpe
     return {"mean": mean_ret, "std": std_ret, "sharpe": sharpe, "sortino": sortino}

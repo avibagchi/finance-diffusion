@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/work/nvme/bemc/abagchi2/finance-diffusion/src/train.py", line 274, in <module>
+    main()
+  File "/work/nvme/bemc/abagchi2/finance-diffusion/src/train.py", line 270, in main
+    train(args)
+  File "/work/nvme/bemc/abagchi2/finance-diffusion/src/train.py", line 61, in train
+    factors = data["factors"]
+KeyError: 'factors'

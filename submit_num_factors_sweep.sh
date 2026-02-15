@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_SCRIPT="${SCRIPT_DIR}/run_train.sh"
 
 # Array of num_factors values to sweep (edit or override with env var)
-NUM_FACTORS_ARR=(${NUM_FACTORS_ARR:-10 150 350})
+NUM_FACTORS_ARR=(${NUM_FACTORS_ARR:-0 1 3 6 11 18 30 48 75 115 170 240 300 350}) 
 # 0 10 25 50 75 100 150 200 250 300 350
 # Base settings (override with env when running)
 IMPLICIT=${IMPLICIT:-0}

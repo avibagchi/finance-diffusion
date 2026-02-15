@@ -73,8 +73,15 @@ def train(args):
                 returns = returns.numpy()
             factors = factors.astype(np.float32)
             returns = returns.astype(np.float32)
-            T, D, K = factors.shape
-            print(f"  Shape: {T} months, {D} assets, {K} factors")
+            T, D, K_full = factors.shape
+            # Use first args.num_factors columns so sweep actually changes the model (0 or >= K_full = use all)
+            if 1 <= args.num_factors < K_full:
+                factors = factors[:, :, : args.num_factors]
+                K = factors.shape[2]
+                print(f"  Shape: {T} months, {D} assets, {K} factors (subset of {K_full})")
+            else:
+                K = K_full
+                print(f"  Shape: {T} months, {D} assets, {K} factors")
         else:
             print("Generating synthetic data...")
             factors, returns = generate_synthetic_data(

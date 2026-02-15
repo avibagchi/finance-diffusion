@@ -28,7 +28,7 @@ source "$PROJECT_DIR/.venv/bin/activate"
 # When DATA_PT is set: num_months, num_assets, num_factors omitted (use all from file)
 NUM_MONTHS=${NUM_MONTHS:-500}
 NUM_ASSETS=${NUM_ASSETS:-200}
-NUM_FACTORS=${NUM_FACTORS:-350}
+NUM_FACTORS=${NUM_FACTORS:-170}
 HIDDEN_SIZE=${HIDDEN_SIZE:-256}
 DEPTH=${DEPTH:-6}
 NUM_HEADS=${NUM_HEADS:-8}
@@ -52,10 +52,10 @@ EXTRA_ARGS=()
 [ "$IMPLICIT" = "1" ] || [ "$IMPLICIT" = "true" ] || [ "$IMPLICIT" = "yes" ] && EXTRA_ARGS+=(--implicit)
 [ "$USE_SCORE_DECOMP" = "1" ] || [ "$USE_SCORE_DECOMP" = "true" ] || [ "$USE_SCORE_DECOMP" = "yes" ] && EXTRA_ARGS+=(--use_score_decomp)
 
-# Omit num_months/num_assets when using data file; num_factors still needed for implicit (Diffac) model dim
+# Omit num_months/num_assets when using data file; always pass num_factors (for implicit model dim and for plot/filename labeling in sweeps)
 DATA_ARGS=()
 [ -z "$DATA_PT" ] && DATA_ARGS+=(--num_months "$NUM_MONTHS" --num_assets "$NUM_ASSETS" --num_factors "$NUM_FACTORS")
-[ -n "$DATA_PT" ] && { [ "$IMPLICIT" = "1" ] || [ "$IMPLICIT" = "true" ] || [ "$IMPLICIT" = "yes" ]; } && DATA_ARGS+=(--num_factors "$NUM_FACTORS")
+[ -n "$DATA_PT" ] && DATA_ARGS+=(--num_factors "$NUM_FACTORS")
 
 SRC_DIR="${PROJECT_DIR}/src"
 cd "$SRC_DIR"
